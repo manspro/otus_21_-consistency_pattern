@@ -1,0 +1,47 @@
+replicaCount: 1
+
+image:
+  repository: order-system
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: NodePort
+  port: 8000
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: arch.homework
+  path: /
+  pathType: Prefix
+
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    password: postgres
+    database: orders_db
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+rabbitmq:
+  enabled: true
+  auth:
+    username: guest
+    password: guest
+  persistence:
+    enabled: true
+    size: 1Gi
+
+env:
+  DB_HOST: "{{ .Release.Name }}-postgresql"
+  DB_PORT: "5432"
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+  DB_NAME: orders_db
+  RABBITMQ_URL: "amqp://guest:guest@{{ .Release.Name }}-rabbitmq:5672"
+  PORT: "3000"

@@ -1,0 +1,406 @@
+{
+  "info": {
+    "name": "Order System Tests",
+    "_postman_id": "order-system-tests",
+    "description": "Тесты для системы заказов с биллингом и нотификациями",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://arch.homework",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Создать пользователя",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has user data', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "    pm.expect(jsonData).to.have.property('name');",
+              "    pm.expect(jsonData).to.have.property('email');",
+              "    pm.collectionVariables.set('userId', jsonData.id);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "console.log('Creating user...');"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["users"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Проверить создание аккаунта в биллинге",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Account exists with zero balance', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('userId');",
+              "    pm.expect(jsonData).to.have.property('balance');",
+              "    pm.expect(jsonData.balance).to.equal(0);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/balance/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["billing", "balance", "{{userId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Положить деньги на счет",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200 or 201', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "pm.test('Balance updated', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('balance');",
+              "    pm.expect(parseFloat(jsonData.balance)).to.equal(1000);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"amount\": 1000\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/billing/deposit",
+          "host": ["{{baseUrl}}"],
+          "path": ["billing", "deposit"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Создать заказ (достаточно средств)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Order created successfully', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "    pm.expect(jsonData).to.have.property('status');",
+              "    pm.expect(jsonData.status).to.equal('completed');",
+              "    pm.collectionVariables.set('orderId', jsonData.id);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());",
+              "",
+              "// Wait for async notification processing",
+              "setTimeout(function(){}, 2000);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"email\": \"test@example.com\",\n  \"price\": 500\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Проверить баланс после заказа",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Balance decreased by order amount', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('balance');",
+              "    pm.expect(parseFloat(jsonData.balance)).to.equal(500);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/balance/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["billing", "balance", "{{userId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "6. Проверить уведомление об успешном заказе",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Success notification exists', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "    pm.expect(jsonData.length).to.be.at.least(1);",
+              "    ",
+              "    var successNotification = jsonData.find(n => n.type === 'success');",
+              "    pm.expect(successNotification).to.exist;",
+              "    pm.expect(successNotification.message).to.include('успешно');",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/notifications/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "{{userId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "7. Создать заказ (недостаточно средств)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 400', function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Order failed due to insufficient funds', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('message');",
+              "    pm.expect(jsonData.message).to.include('Insufficient funds');",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());",
+              "",
+              "// Wait for async notification processing",
+              "setTimeout(function(){}, 2000);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"email\": \"test@example.com\",\n  \"price\": 1000\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "8. Проверить баланс не изменился",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Balance unchanged', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('balance');",
+              "    pm.expect(parseFloat(jsonData.balance)).to.equal(500);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/balance/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["billing", "balance", "{{userId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "9. Проверить уведомление о неудачном заказе",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Failure notification exists', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "    pm.expect(jsonData.length).to.be.at.least(2);",
+              "    ",
+              "    var failureNotification = jsonData.find(n => n.type === 'failure');",
+              "    pm.expect(failureNotification).to.exist;",
+              "    pm.expect(failureNotification.message).to.include('Не удалось');",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/notifications/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "{{userId}}"]
+        }
+      },
+      "response": []
+    }
+  ]
+}
