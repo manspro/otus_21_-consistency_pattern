@@ -20,6 +20,16 @@
       "key": "orderId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "firstIdempotentOrderId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -398,6 +408,156 @@
           "raw": "{{baseUrl}}/notifications/{{userId}}",
           "host": ["{{baseUrl}}"],
           "path": ["notifications", "{{userId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "10. Создать заказ с Idempotency-Key (первый раз)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const idempotencyKey = pm.variables.replaceIn('{{$guid}}');",
+              "pm.collectionVariables.set('idempotencyKey', idempotencyKey);",
+              "console.log('Generated Idempotency-Key:', idempotencyKey);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Order created', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "    pm.collectionVariables.set('firstIdempotentOrderId', jsonData.id);",
+              "});",
+              "",
+              "pm.test('NOT from cache', function () {",
+              "    pm.expect(pm.response.headers.get('X-Idempotency-Cached')).to.not.equal('true');",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\\n  \\"userId\\": \\"{{userId}}\\",\\n  \\"email\\": \\"test@example.com\\",\\n  \\"price\\": 200\\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "11. Повторить с тем же Idempotency-Key",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response from cache', function () {",
+              "    pm.expect(pm.response.headers.get('X-Idempotency-Cached')).to.equal('true');",
+              "});",
+              "",
+              "pm.test('Same order ID', function () {",
+              "    var jsonData = pm.response.json();",
+              "    var firstOrderId = pm.collectionVariables.get('firstIdempotentOrderId');",
+              "    pm.expect(jsonData.id).to.equal(firstOrderId);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());",
+              "console.log('X-Idempotency-Cached:', pm.response.headers.get('X-Idempotency-Cached'));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\\n  \\"userId\\": \\"{{userId}}\\",\\n  \\"email\\": \\"test@example.com\\",\\n  \\"price\\": 200\\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "12. Проверить баланс (списано только один раз)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Balance is 300 (500 - 200)', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(parseFloat(jsonData.balance)).to.equal(300);",
+              "});",
+              "",
+              "console.log('Request:', pm.request);",
+              "console.log('Response:', pm.response.json());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/balance/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["billing", "balance", "{{userId}}"]
         }
       },
       "response": []

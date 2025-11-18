@@ -1,10 +1,11 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order } from './entities/order.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { BillingService } from '../billing/billing.service';
 import { RabbitMQService } from '../common/rabbitmq/rabbitmq.service';
+import { IdempotencyService } from './services/idempotency.service';
 
 @Injectable()
 export class OrderService {
@@ -13,7 +14,63 @@ export class OrderService {
     private orderRepository: Repository<Order>,
     private billingService: BillingService,
     private rabbitMQService: RabbitMQService,
+    private idempotencyService: IdempotencyService,
   ) {}
+
+  async createOrderIdempotent(
+    createOrderDto: CreateOrderDto,
+    idempotencyKey?: string,
+  ): Promise<{ order: Order; statusCode: number; fromCache: boolean }> {
+    // если передан ключ идемпотентности, проверяем кеш
+    if (idempotencyKey) {
+      const cachedRecord = await this.idempotencyService.findByKey(idempotencyKey);
+      
+      if (cachedRecord) {
+        const order = await this.orderRepository.findOne({
+          where: { id: cachedRecord.orderId },
+        });
+        
+        if (order) {
+          return {
+            order,
+            statusCode: cachedRecord.statusCode,
+            fromCache: true,
+          };
+        }
+      }
+    }
+
+    try {
+      const order = await this.createOrder(createOrderDto);
+      
+      if (idempotencyKey) {
+        await this.idempotencyService.saveRecord(
+          idempotencyKey,
+          order.id,
+          order,
+          201,
+        );
+      }
+
+      return {
+        order,
+        statusCode: 201,
+        fromCache: false,
+      };
+    } catch (error) {
+      // сохраняем ошибку в кеш идемпотентности
+      if (idempotencyKey && error instanceof HttpException) {
+        const response = error.getResponse();
+        await this.idempotencyService.saveRecord(
+          idempotencyKey,
+          (response as any).orderId || '',
+          response,
+          error.getStatus(),
+        );
+      }
+      throw error;
+    }
+  }
 
   async createOrder(createOrderDto: CreateOrderDto): Promise<Order> {
     const order = this.orderRepository.create({
